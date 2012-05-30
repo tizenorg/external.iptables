@@ -3,6 +3,7 @@ Summary: administration tools for packet filtering and NAT
 Version: 1.4.9.1
 Release: 1
 Source: %{name}-%{version}.tar.gz
+Source1001: packaging/iptables.manifest 
 Group: System/Base
 URL: http://www.netfilter.org/
 License: GPLv2
@@ -46,6 +47,7 @@ user-space packet queuing library.
 %setup -q
 
 %build
+cp %{SOURCE1001} .
 %autogen
 %configure --prefix=%{_prefix}
 make %{?jobs:-j%jobs}
@@ -63,6 +65,7 @@ rm -rf $RPM_BUILD_ROOT
 %postun -p /sbin/ldconfig
 
 %files
+%manifest iptables.manifest
 %defattr(-,root,root)
 /usr/bin/iptables-xml
 /usr/lib/libip4tc.so
@@ -76,6 +79,7 @@ rm -rf $RPM_BUILD_ROOT
 /usr/sbin/iptables*
 
 %files ipv6
+%manifest iptables.manifest
 %defattr(-,root,root)
 /usr/sbin/ip6tables*
 /usr/lib/libip6tc.so
@@ -83,6 +87,7 @@ rm -rf $RPM_BUILD_ROOT
 /usr/libexec/xtables/libip6t*
 
 %files devel
+%manifest iptables.manifest
 %defattr(-,root,root)
 /usr/include/*
 /usr/lib/*.la
