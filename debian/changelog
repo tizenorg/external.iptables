@@ -1,0 +1,54 @@
+iptables (1.4.9.2-slp2+4) unstable; urgency=low
+
+  * Generate shared library info
+  * Git: 165.213.180.234:/slp/pkgs/i/iptables
+  * Tag: iptables_1.4.9.2-slp2+4
+
+ -- Byeongho Shim <bh.shim@samsung.com>  Fri, 22 Apr 2011 04:05:57 -0700
+
+iptables (1.4.9.2-slp2+3) unstable; urgency=low
+
+  * Run autogen.sh to fix "as-needed" issue
+  * Git: 165.213.180.234:/slp/pkgs/i/iptables
+  * Tag: iptables_1.4.9.2-slp2+3
+
+ -- Byeongho Shim <bh.shim@samsung.com>  Fri, 24 Dec 2010 11:16:35 +0900
+
+iptables (1.4.9.2-slp2+2) unstable; urgency=low
+
+  * Git: 165.213.180.234:slp/pkgs/i/iptables
+  * Tag: iptables_1.4.9.2-slp2+2
+
+  * Apply "as-needed" link option
+
+ -- Byeongho Shim <bh.shim@samsung.com>  Tue, 07 Dec 2010 11:06:17 +0900
+
+iptables (1.4.9.2-slp2+1) unstable; urgency=low
+
+  * Change version name
+  * Git: 165.213.180.234:/git/slp/pkgs/iptables
+  * Tag: iptables_1.4.9.2-slp2+1
+
+ -- Byeongho Shim <bh.shim@samsung.com>  Thu, 25 Nov 2010 10:28:18 +0900
+
+iptables (1.4.9.1-slp2+1) unstable; urgency=low
+
+  * Change control file and version.
+  * Git: 165.213.180.234:/git/slp/pkgs/iptables
+  * Tag: iptables_1.4.9.1-slp2+1
+
+ -- Byeongho Shim <bh.shim@samsung.com>  Thu, 25 Nov 2010 10:11:43 +0900
+
+iptables (1.4.9.2) unstable; urgency=low
+
+  * Add GIT information
+  * Git: 165.213.180.234:/git/slp/pkgs/iptables
+  * Tag: iptables_1.4.9.2
+
+ -- Byeongho Shim <bh.shim@samsung.com>  Wed, 24 Nov 2010 20:38:37 +0900
+
+iptables (1.4.9.1) unstable; urgency=low
+
+  * Initial Release.
+
+ -- Byeongho Shim <bh.shim@samsung.com>  Tue, 26 Oct 2010 11:54:56 +0900
