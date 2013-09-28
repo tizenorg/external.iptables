@@ -54,6 +54,9 @@ make %{?jobs:-j%jobs}
 rm -rf %{buildroot}
 make install DESTDIR=%{buildroot}
 
+mkdir -p %{buildroot}/usr/share/license
+cp COPYING %{buildroot}/usr/share/license/%{name}
+
 %clean
 rm -rf $RPM_BUILD_ROOT 
 
@@ -75,6 +78,7 @@ rm -rf $RPM_BUILD_ROOT
 /usr/libexec/xtables/libipt*
 /usr/libexec/xtables/libxt*
 /usr/sbin/iptables*
+/usr/share/license/%{name}
 
 %files ipv6
 %manifest iptables-ipv6.manifest
