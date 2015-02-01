@@ -1,44 +1,50 @@
-/* Shared library add-on to iptables to add destination-NAT support. */
 #include <stdio.h>
 #include <netdb.h>
 #include <string.h>
 #include <stdlib.h>
-#include <getopt.h>
 #include <xtables.h>
 #include <iptables.h> /* get_kernel_version */
 #include <limits.h> /* INT_MAX in ip_tables.h */
 #include <linux/netfilter_ipv4/ip_tables.h>
-#include <net/netfilter/nf_nat.h>
+#include <linux/netfilter/nf_nat.h>
 
-#define IPT_DNAT_OPT_DEST 0x1
-#define IPT_DNAT_OPT_RANDOM 0x2
+enum {
+	O_TO_DEST = 0,
+	O_RANDOM,
+	O_PERSISTENT,
+	O_X_TO_DEST, /* hidden flag */
+	F_TO_DEST   = 1 << O_TO_DEST,
+	F_RANDOM    = 1 << O_RANDOM,
+	F_X_TO_DEST = 1 << O_X_TO_DEST,
+};
 
 /* Dest NAT data consists of a multi-range, indicating where to map
    to. */
 struct ipt_natinfo
 {
 	struct xt_entry_target t;
-	struct nf_nat_multi_range mr;
+	struct nf_nat_ipv4_multi_range_compat mr;
 };
 
 static void DNAT_help(void)
 {
 	printf(
 "DNAT target options:\n"
-" --to-destination <ipaddr>[-<ipaddr>][:port-port]\n"
+" --to-destination [<ipaddr>[-<ipaddr>]][:port[-port]]\n"
 "				Address to map destination to.\n"
 "[--random] [--persistent]\n");
 }
 
-static const struct option DNAT_opts[] = {
-	{ "to-destination", 1, NULL, '1' },
-	{ "random", 0, NULL, '2' },
-	{ "persistent", 0, NULL, '3' },
-	{ .name = NULL }
+static const struct xt_option_entry DNAT_opts[] = {
+	{.name = "to-destination", .id = O_TO_DEST, .type = XTTYPE_STRING,
+	 .flags = XTOPT_MAND | XTOPT_MULTI},
+	{.name = "random", .id = O_RANDOM, .type = XTTYPE_NONE},
+	{.name = "persistent", .id = O_PERSISTENT, .type = XTTYPE_NONE},
+	XTOPT_TABLEEND,
 };
 
 static struct ipt_natinfo *
-append_range(struct ipt_natinfo *info, const struct nf_nat_range *range)
+append_range(struct ipt_natinfo *info, const struct nf_nat_ipv4_range *range)
 {
 	unsigned int size;
 
@@ -58,12 +64,15 @@ append_range(struct ipt_natinfo *info, const struct nf_nat_range *range)
 
 /* Ranges expected in network order. */
 static struct xt_entry_target *
-parse_to(char *arg, int portok, struct ipt_natinfo *info)
+parse_to(const char *orig_arg, int portok, struct ipt_natinfo *info)
 {
-	struct nf_nat_range range;
-	char *colon, *dash, *error;
+	struct nf_nat_ipv4_range range;
+	char *arg, *colon, *dash, *error;
 	const struct in_addr *ip;
 
+	arg = strdup(orig_arg);
+	if (arg == NULL)
+		xtables_error(RESOURCE_PROBLEM, "strdup");
 	memset(&range, 0, sizeof(range));
 	colon = strchr(arg, ':');
 
@@ -74,7 +83,7 @@ parse_to(char *arg, int portok, struct ipt_natinfo *info)
 			xtables_error(PARAMETER_PROBLEM,
 				   "Need TCP, UDP, SCTP or DCCP with port specification");
 
-		range.flags |= IP_NAT_RANGE_PROTO_SPECIFIED;
+		range.flags |= NF_NAT_RANGE_PROTO_SPECIFIED;
 
 		port = atoi(colon+1);
 		if (port <= 0 || port > 65535)
@@ -106,12 +115,14 @@ parse_to(char *arg, int portok, struct ipt_natinfo *info)
 			range.max.tcp.port = htons(maxport);
 		}
 		/* Starts with a colon? No IP info...*/
-		if (colon == arg)
+		if (colon == arg) {
+			free(arg);
 			return &(append_range(info, &range)->t);
+		}
 		*colon = '\0';
 	}
 
-	range.flags |= IP_NAT_RANGE_MAP_IPS;
+	range.flags |= NF_NAT_RANGE_MAP_IPS;
 	dash = strchr(arg, '-');
 	if (colon && dash && dash > colon)
 		dash = NULL;
@@ -133,14 +144,14 @@ parse_to(char *arg, int portok, struct ipt_natinfo *info)
 	} else
 		range.max_ip = range.min_ip;
 
+	free(arg);
 	return &(append_range(info, &range)->t);
 }
 
-static int DNAT_parse(int c, char **argv, int invert, unsigned int *flags,
-                      const void *e, struct xt_entry_target **target)
+static void DNAT_parse(struct xt_option_call *cb)
 {
-	const struct ipt_entry *entry = e;
-	struct ipt_natinfo *info = (void *)*target;
+	const struct ipt_entry *entry = cb->xt_entry;
+	struct ipt_natinfo *info = (void *)(*cb->target);
 	int portok;
 
 	if (entry->ip.proto == IPPROTO_TCP
@@ -152,53 +163,37 @@ static int DNAT_parse(int c, char **argv, int invert, unsigned int *flags,
 	else
 		portok = 0;
 
-	switch (c) {
-	case '1':
-		if (xtables_check_inverse(optarg, &invert, NULL, 0, argv))
-			xtables_error(PARAMETER_PROBLEM,
-				   "Unexpected `!' after --to-destination");
-
-		if (*flags & IPT_DNAT_OPT_DEST) {
+	xtables_option_parse(cb);
+	switch (cb->entry->id) {
+	case O_TO_DEST:
+		if (cb->xflags & F_X_TO_DEST) {
 			if (!kernel_version)
 				get_kernel_version();
 			if (kernel_version > LINUX_VERSION(2, 6, 10))
 				xtables_error(PARAMETER_PROBLEM,
-					   "Multiple --to-destination not supported");
+					   "DNAT: Multiple --to-destination not supported");
 		}
-		*target = parse_to(optarg, portok, info);
-		/* WTF do we need this for?? */
-		if (*flags & IPT_DNAT_OPT_RANDOM)
-			info->mr.range[0].flags |= IP_NAT_RANGE_PROTO_RANDOM;
-		*flags |= IPT_DNAT_OPT_DEST;
-		return 1;
-
-	case '2':
-		if (*flags & IPT_DNAT_OPT_DEST) {
-			info->mr.range[0].flags |= IP_NAT_RANGE_PROTO_RANDOM;
-			*flags |= IPT_DNAT_OPT_RANDOM;
-		} else
-			*flags |= IPT_DNAT_OPT_RANDOM;
-		return 1;
-
-	case '3':
-		info->mr.range[0].flags |= IP_NAT_RANGE_PERSISTENT;
-		return 1;
-
-	default:
-		return 0;
+		*cb->target = parse_to(cb->arg, portok, info);
+		cb->xflags |= F_X_TO_DEST;
+		break;
+	case O_PERSISTENT:
+		info->mr.range[0].flags |= NF_NAT_RANGE_PERSISTENT;
+		break;
 	}
 }
 
-static void DNAT_check(unsigned int flags)
+static void DNAT_fcheck(struct xt_fcheck_call *cb)
 {
-	if (!flags)
-		xtables_error(PARAMETER_PROBLEM,
-			   "You must specify --to-destination");
+	static const unsigned int f = F_TO_DEST | F_RANDOM;
+	struct nf_nat_ipv4_multi_range_compat *mr = cb->data;
+
+	if ((cb->xflags & f) == f)
+		mr->range[0].flags |= NF_NAT_RANGE_PROTO_RANDOM;
 }
 
-static void print_range(const struct nf_nat_range *r)
+static void print_range(const struct nf_nat_ipv4_range *r)
 {
-	if (r->flags & IP_NAT_RANGE_MAP_IPS) {
+	if (r->flags & NF_NAT_RANGE_MAP_IPS) {
 		struct in_addr a;
 
 		a.s_addr = r->min_ip;
@@ -208,7 +203,7 @@ static void print_range(const struct nf_nat_range *r)
 			printf("-%s", xtables_ipaddr_to_numeric(&a));
 		}
 	}
-	if (r->flags & IP_NAT_RANGE_PROTO_SPECIFIED) {
+	if (r->flags & NF_NAT_RANGE_PROTO_SPECIFIED) {
 		printf(":");
 		printf("%hu", ntohs(r->min.tcp.port));
 		if (r->max.tcp.port != r->min.tcp.port)
@@ -222,14 +217,13 @@ static void DNAT_print(const void *ip, const struct xt_entry_target *target,
 	const struct ipt_natinfo *info = (const void *)target;
 	unsigned int i = 0;
 
-	printf("to:");
+	printf(" to:");
 	for (i = 0; i < info->mr.rangesize; i++) {
 		print_range(&info->mr.range[i]);
-		printf(" ");
-		if (info->mr.range[i].flags & IP_NAT_RANGE_PROTO_RANDOM)
-			printf("random ");
-		if (info->mr.range[i].flags & IP_NAT_RANGE_PERSISTENT)
-			printf("persistent ");
+		if (info->mr.range[i].flags & NF_NAT_RANGE_PROTO_RANDOM)
+			printf(" random");
+		if (info->mr.range[i].flags & NF_NAT_RANGE_PERSISTENT)
+			printf(" persistent");
 	}
 }
 
@@ -239,13 +233,12 @@ static void DNAT_save(const void *ip, const struct xt_entry_target *target)
 	unsigned int i = 0;
 
 	for (i = 0; i < info->mr.rangesize; i++) {
-		printf("--to-destination ");
+		printf(" --to-destination ");
 		print_range(&info->mr.range[i]);
-		printf(" ");
-		if (info->mr.range[i].flags & IP_NAT_RANGE_PROTO_RANDOM)
-			printf("--random ");
-		if (info->mr.range[i].flags & IP_NAT_RANGE_PERSISTENT)
-			printf("--persistent ");
+		if (info->mr.range[i].flags & NF_NAT_RANGE_PROTO_RANDOM)
+			printf(" --random");
+		if (info->mr.range[i].flags & NF_NAT_RANGE_PERSISTENT)
+			printf(" --persistent");
 	}
 }
 
@@ -253,14 +246,14 @@ static struct xtables_target dnat_tg_reg = {
 	.name		= "DNAT",
 	.version	= XTABLES_VERSION,
 	.family		= NFPROTO_IPV4,
-	.size		= XT_ALIGN(sizeof(struct nf_nat_multi_range)),
-	.userspacesize	= XT_ALIGN(sizeof(struct nf_nat_multi_range)),
+	.size		= XT_ALIGN(sizeof(struct nf_nat_ipv4_multi_range_compat)),
+	.userspacesize	= XT_ALIGN(sizeof(struct nf_nat_ipv4_multi_range_compat)),
 	.help		= DNAT_help,
-	.parse		= DNAT_parse,
-	.final_check	= DNAT_check,
+	.x6_parse	= DNAT_parse,
+	.x6_fcheck	= DNAT_fcheck,
 	.print		= DNAT_print,
 	.save		= DNAT_save,
-	.extra_opts	= DNAT_opts,
+	.x6_options	= DNAT_opts,
 };
 
 void _init(void)
