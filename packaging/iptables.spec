@@ -1,6 +1,6 @@
 Name:		iptables
 Summary:	Tools for managing Linux kernel packet filtering capabilities
-Version:	1.4.22
+Version:	1.4.21.1
 Release:	1
 Group:		System/Network
 Source:		%{name}-%{version}.tar.gz
@@ -16,7 +16,7 @@ you should install this package.
 %package devel
 Summary:	Development package for iptables
 Group:		System/Network
-License:	GPL-2.0+
+License:        GPL-2.0+
 Requires:	%{name} = %{version}
 Requires:	pkgconfig
 
@@ -31,7 +31,7 @@ stable and may change with every new version. It is therefore unsupported.
 
 
 %build
-export CFLAGS+=" $RPM_OPT_FLAGS -Wall -Werror -O2 -D_FORTIFY_SOURCE=2 -fno-strict-aliasing"
+export CFLAGS+=" $RPM_OPT_FLAGS -Wall -Werror -O2 -D_FORTIFY_SOURCE=2 -fno-strict-aliasing -Wno-unused-value"
 export LDFLAGS+=" -Wl,--as-needed"
 
 %configure --enable-devel --with-kernel=/usr --with-kbuild=/usr --with-ksource=/usr
